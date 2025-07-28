@@ -1,0 +1,21 @@
+{
+  "tasks": {
+    "dev": "deno run -A  main.ts",
+    "start": "dxd vault run \"deno task dev\"",
+    "wh": "deno run -A ./service/utils/telegram.ts",
+    "webhook": "dxd vault run \"deno task wh\""
+  },
+  "imports": {
+    "@grammy": "https://deno.land/x/grammy/mod.ts",
+    "@qdrant": "npm:@qdrant/js-client-rest",
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@2.49.1",
+    "@artpani/verdict": "jsr:@artpani/verdict",
+    "@artpani/tuner": "jsr:@artpani/tuner@0.6.7",
+    "$config": "./config/mod.ts",
+    "$shared": "./shared.ts",
+    "$bot": "./service/bot/mod.ts",
+    "$utils": "./service/utils/logger.ts",
+    "$luminous": "jsr:@vseplet/luminous@1.0.6",
+    "@hono": "jsr:@hono/hono"
+  }
+}
