@@ -66,9 +66,9 @@ export async function upsert(
     if (!p.payload) {
       log.err(`🚨 payload отсутствует у точки id=${p.id}`);
     }
-    log.trc(
-      `Payload [${i}] до очистки:\n${JSON.stringify(p.payload, null, 2)}`,
-    );
+    // log.trc(
+    //   `Payload [${i}] до очистки:\n${JSON.stringify(p.payload, null, 2)}`,
+    // );
     const cleaned = sanitizePayload(p.payload ?? {});
     if (Object.keys(cleaned).length === 0 && strictMode) {
       cleaned.__dummy = "strict-mode-requires-something";

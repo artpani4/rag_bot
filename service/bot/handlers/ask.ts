@@ -1,8 +1,7 @@
 // service/bot/handlers/ask.ts
 
 import { Bot, Context } from "@grammy";
-import { embedText } from "$shared";
-import { client as qdrant } from "$shared";
+import { client as qdrant, config, embedText, verdict } from "$shared";
 import luminous from "$luminous";
 
 const log = new luminous.Logger(
@@ -21,54 +20,78 @@ export function registerAskHandler(bot: Bot<Context>) {
 
     log.inf("Вопрос: " + question);
 
-    // 1. Получаем embedding
+    // 1. Получаем embedding через verdict
     let embedding: number[];
-    try {
-      const result = await embedText([question]);
-      embedding = result[0];
-    } catch (e) {
-      log.err("Ошибка эмбеддинга: " + e);
-      return ctx.reply("❌ Ошибка при обработке вопроса.");
-    }
+    const embRes = await (async () => {
+      try {
+        const res = await embedText([question]);
+        return verdict.ok(res[0]);
+      } catch (e) {
+        return verdict.err(e instanceof Error ? e.message : String(e));
+      }
+    })();
 
-    // 2. Жёстко указываем ID коллекции
-    const collection = "chat_4598168443";
+    return verdict.match(embRes, {
+      ok: async (embedding) => {
+        // 2. Проверяем наличие коллекции через verdict
+        const collection = config.data.search.collection;
+        const collRes = await (async () => {
+          try {
+            await qdrant.getCollection(collection);
+            return verdict.ok(null);
+          } catch (e) {
+            return verdict.err(e instanceof Error ? e.message : String(e));
+          }
+        })();
+        if (collRes.ok === false) {
+          return ctx.reply(
+            `⚠️ Коллекция ${collection} не найдена. Загрузите сообщения через /import.`,
+          );
+        }
 
-    try {
-      await qdrant.getCollection(collection);
-    } catch {
-      return ctx.reply(
-        `⚠️ Коллекция ${collection} не найдена. Загрузите сообщения через /import.`,
-      );
-    }
+        // 3. Поиск в Qdrant c verdict и параметрами из конфига
+        const { limit, minScore } = config.data.search;
+        const searchRes = await (async () => {
+          try {
+            const hits = await qdrant.search(collection, {
+              vector: embedding,
+              limit,
+              with_payload: true,
+              score_threshold: minScore,
+            });
+            return verdict.ok(hits);
+          } catch (e) {
+            return verdict.err(e instanceof Error ? e.message : String(e));
+          }
+        })();
 
-    // 3. Поиск в Qdrant
-    let searchResult;
-    try {
-      searchResult = await qdrant.search(collection, {
-        vector: embedding,
-        limit: 5,
-        with_payload: true,
-      });
-    } catch (e) {
-      log.err("Ошибка поиска в Qdrant: " + e);
-      return ctx.reply("❌ Ошибка при поиске похожих сообщений.");
-    }
+        return verdict.match(searchRes, {
+          ok: async (hits) => {
+            if (!hits.length) {
+              return ctx.reply("❌ Ничего не найдено.");
+            }
+            const response = hits
+              .map((point, i) => {
+                const p = point.payload as any;
+                const score = point.score?.toFixed(3) ?? "?";
+                return `*${i + 1}.* [${
+                  p?.from || "анон"
+                }]: ${p?.text}\n_Сходство: ${score}_`;
+              })
+              .join("\n\n");
 
-    if (!searchResult.length) {
-      return ctx.reply("❌ Ничего не найдено.");
-    }
-
-    const response = searchResult
-      .map((point, i) => {
-        const p = point.payload as any;
-        const score = point.score?.toFixed(3) ?? "?";
-        return `*${i + 1}.* [${
-          p?.from || "анон"
-        }]: ${p?.text}\n_Сходство: ${score}_`;
-      })
-      .join("\n\n");
-
-    return ctx.reply(response, { parse_mode: "Markdown" });
+            return ctx.reply(response, { parse_mode: "Markdown" });
+          },
+          err: async (errMsg) => {
+            log.err("Ошибка поиска в Qdrant: " + errMsg);
+            return ctx.reply("❌ Ошибка при поиске похожих сообщений.");
+          },
+        });
+      },
+      err: async (errMsg) => {
+        log.err("Ошибка эмбеддинга: " + errMsg);
+        return ctx.reply("❌ Ошибка при обработке вопроса.");
+      },
+    });
   });
 }

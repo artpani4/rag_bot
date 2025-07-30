@@ -2,9 +2,11 @@ import { webhookCallback } from "@grammy";
 import { Context, Next } from "@hono";
 import { app, bot } from "./shared.ts";
 import { startHandler } from "./service/bot/handlers/start.ts";
-import { registerImportHandler } from "./service/bot/handlers/import.ts";
+
 import { Api, Context as Ctx, RawApi } from "@grammy";
 import { registerAskHandler } from "./service/bot/handlers/ask.ts";
+import { registerSmartImportHandler } from "./service/bot/handlers/import/import_smart.ts";
+
 export const botHandleUpdate = webhookCallback(bot, "hono");
 
 app.post("/telegramGetUpdates", async (c: Context, next: Next) => {
@@ -17,7 +19,8 @@ app.post("/telegramGetUpdates", async (c: Context, next: Next) => {
 });
 
 bot.command("start", startHandler);
-registerImportHandler(bot);
+// registerImportHandler(bot);
+registerSmartImportHandler(bot);
 registerAskHandler(bot);
 Deno.serve(app.fetch);
 
